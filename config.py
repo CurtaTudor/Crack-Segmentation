@@ -10,5 +10,5 @@ LABEL_COLORS_LIST = [
 
 VIS_LABEL_MAP = [
     [0,0,0],
-    [174,218,255]   
+    [255,0,0]   
 ]
