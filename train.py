@@ -109,11 +109,8 @@ if __name__ == '__main__':
     save_best_model = SaveBestModel()
     save_best_iou = SaveBestModelIOU()
     # LR Scheduler.
-    scheduler = CosineAnnealingLR(
-        optimizer,
-        T_max=args.epochs,   # ciclul complet de epoci
-        eta_min=1e-6,        # lr minim
-        verbose=True
+    scheduler = MultiStepLR(
+        optimizer, milestones=args.scheduler_epochs, gamma=0.1, verbose=True
     )
 
     train_loss, train_pix_acc, train_miou = [], [], []
