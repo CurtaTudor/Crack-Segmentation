@@ -9,6 +9,7 @@ from transformers import SegformerFeatureExtractor
 from engine import train, validate
 from utils import save_model, SaveBestModel, save_plots, SaveBestModelIOU
 from torch.optim.lr_scheduler import MultiStepLR
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 seed = 42
 torch.manual_seed(seed)
@@ -73,7 +74,12 @@ if __name__ == '__main__':
         p.numel() for p in model.parameters() if p.requires_grad)
     print(f"{total_trainable_params:,} training parameters.")
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=args.lr,
+        momentum=0.9,
+        weight_decay=1e-4
+    )
 
     train_images, train_masks, valid_images, valid_masks = get_images(
         root_path='input'    
@@ -103,8 +109,11 @@ if __name__ == '__main__':
     save_best_model = SaveBestModel()
     save_best_iou = SaveBestModelIOU()
     # LR Scheduler.
-    scheduler = MultiStepLR(
-        optimizer, milestones=args.scheduler_epochs, gamma=0.1, verbose=True
+    scheduler = CosineAnnealingLR(
+        optimizer,
+        T_max=args.epochs,   # ciclul complet de epoci
+        eta_min=1e-6,        # lr minim
+        verbose=True
     )
 
     train_loss, train_pix_acc, train_miou = [], [], []
