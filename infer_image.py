@@ -1,3 +1,6 @@
+# python infer_image.py --input input/valid/images/ --device cpu --imgsz 1568 1088
+# python infer_image.py --input input/edmcrack_images/ --device cpu --imgsz 1568 1088
+
 from transformers import (
     SegformerFeatureExtractor, 
     SegformerForSemanticSegmentation
@@ -61,7 +64,7 @@ for image_path in image_paths:
     )
     outputs = image_overlay(image, seg_map)
     cv2.imshow('Image', outputs)
-    cv2.waitKey(1)
+    cv2.waitKey(4000)
     
     # Save path.
     image_name = image_path.split(os.path.sep)[-1]
