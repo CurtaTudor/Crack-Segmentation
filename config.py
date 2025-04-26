@@ -5,7 +5,7 @@ ALL_CLASSES = [
 
 LABEL_COLORS_LIST = [
     [0,0,0],
-    [255,255,255]
+    [0,255,0]
 ]
 
 VIS_LABEL_MAP = [

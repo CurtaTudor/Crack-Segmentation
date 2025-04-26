@@ -1,113 +1,65 @@
+# engine.py (modificat)
+
 import torch
 import torch.nn as nn
-
 from tqdm import tqdm
-from utils import draw_translucent_seg_maps
 from metrics import IOUEval
+from utils import draw_translucent_seg_maps
 
-def train(
-    model,
-    train_dataloader,
-    device,
-    optimizer,
-    classes_to_train
-):
-    print('Training')
+def train_epoch(model, loader, optimizer, device, num_classes):
     model.train()
-    train_running_loss = 0.0
-    prog_bar = tqdm(
-        train_dataloader, 
-        total=len(train_dataloader), 
-        bar_format='{l_bar}{bar:20}{r_bar}{bar:-20b}'
-    )
-    counter = 0 # to keep track of batch counter
-    num_classes = len(classes_to_train)
+    criterion = nn.CrossEntropyLoss()
+    running_loss = 0.0
     iou_eval = IOUEval(num_classes)
 
-    for i, data in enumerate(prog_bar):
-        counter += 1
-        pixel_values, target = data['pixel_values'].to(device), data['labels'].to(device)
+    for imgs, masks in tqdm(loader, total=len(loader)):
+        imgs, masks = imgs.to(device), masks.to(device)
         optimizer.zero_grad()
-        outputs = model(pixel_values=pixel_values, labels=target)
+        logits = model(imgs)  # shape: [B, C, H, W]
 
-        ##### BATCH-WISE LOSS #####
-        loss = outputs.loss
-        train_running_loss += loss.item()
-        ###########################
-
-        ##### BACKPROPAGATION AND PARAMETER UPDATION #####
+        loss = criterion(logits, masks)
         loss.backward()
         optimizer.step()
-        ##################################################
 
-        logits = outputs.logits
-        upsampled_logits = nn.functional.interpolate(
-            logits, size=target.shape[-2:], 
-            mode="bilinear", 
-            align_corners=False
-        )
-        iou_eval.addBatch(upsampled_logits.max(1)[1].data, target.data)
-        
-    ##### PER EPOCH LOSS #####
-    train_loss = train_running_loss / counter
-    ##########################
-    overall_acc, per_class_acc, per_class_iou, mIOU = iou_eval.getMetric()
-    return train_loss, overall_acc, mIOU
+        running_loss += loss.item()
+        # predicţie
+        preds = torch.argmax(logits, dim=1)
+        iou_eval.addBatch(preds, masks)
 
-def validate(
-    model,
-    valid_dataloader,
-    device,
-    classes_to_train,
-    label_colors_list,
-    epoch,
-    save_dir
-):
-    print('Validating')
+    avg_loss = running_loss / len(loader)
+    _, _, _, mIoU = iou_eval.getMetric()
+    return avg_loss, mIoU
+
+def validate_epoch(model, loader, device, num_classes, label_colors_list, epoch, save_dir):
     model.eval()
-    valid_running_loss = 0.0
-    num_classes = len(classes_to_train)
+    criterion = nn.CrossEntropyLoss()
+    running_loss = 0.0
     iou_eval = IOUEval(num_classes)
 
     with torch.no_grad():
-        prog_bar = tqdm(
-            valid_dataloader, 
-            total=(len(valid_dataloader)), 
-            bar_format='{l_bar}{bar:20}{r_bar}{bar:-20b}'
+        for i, (imgs, masks) in enumerate(tqdm(loader, total=len(loader))):
+            imgs, masks = imgs.to(device), masks.to(device)
+            logits = model(imgs)
+
+            loss = criterion(logits, masks)
+            running_loss += loss.item()
+
+            preds = torch.argmax(logits, dim=1)
+            iou_eval.addBatch(preds, masks)
+
+    if i == 0:
+        # scoatem primul element din batch și-i adăugăm dimensiunea batch=1
+        sample_img    = imgs[0].unsqueeze(0)    # [1, C, H, W]
+        sample_logits = logits[0].unsqueeze(0)  # [1, num_classes, H, W]
+        draw_translucent_seg_maps(
+            sample_img,
+            sample_logits,
+            epoch,
+            i,
+            save_dir,
+            label_colors_list,
         )
-        counter = 0 # To keep track of batch counter.
-        for i, data in enumerate(prog_bar):
-            counter += 1
-            pixel_values, target = data['pixel_values'].to(device), data['labels'].to(device)
-            outputs = model(pixel_values=pixel_values, labels=target)
 
-            logits = outputs.logits
-            upsampled_logits = nn.functional.interpolate(
-                logits, size=target.shape[-2:], 
-                mode="bilinear", 
-                align_corners=False
-            )
-            
-            # Save the validation segmentation maps.
-            if i == 1:
-                draw_translucent_seg_maps(
-                    pixel_values, 
-                    upsampled_logits, 
-                    epoch, 
-                    i, 
-                    save_dir, 
-                    label_colors_list,
-                )
-
-            ##### BATCH-WISE LOSS #####
-            loss = outputs.loss
-            valid_running_loss += loss.item()
-            ###########################
-
-            iou_eval.addBatch(upsampled_logits.max(1)[1].data, target.data)
-        
-    ##### PER EPOCH LOSS #####
-    valid_loss = valid_running_loss / counter
-    ##########################
-    overall_acc, per_class_acc, per_class_iou, mIOU = iou_eval.getMetric()
-    return valid_loss, overall_acc, mIOU
+    avg_loss = running_loss / len(loader)
+    _, _, _, mIoU = iou_eval.getMetric()
+    return avg_loss, mIoU

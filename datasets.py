@@ -5,6 +5,8 @@ import cv2
 from utils import get_label_mask, set_class_values
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
+import torch
+from torchvision import transforms
 
 def get_images(root_path):
     train_images = glob.glob(f"{root_path}/train/images/*")
@@ -19,129 +21,55 @@ def get_images(root_path):
     return train_images, train_masks, valid_images, valid_masks
 
 def train_transforms(img_size):
-    """
-    Transforms/augmentations for training images and masks.
-
-    :param img_size: Integer, for image resize.
-    """
-    train_image_transform = A.Compose([
-        A.Resize(img_size[1], img_size[0], always_apply=True),
+    return A.Compose([
+        A.Resize(img_size[1], img_size[0]),
         A.HorizontalFlip(p=0.5),
         A.RandomBrightnessContrast(p=0.2),
         A.Rotate(limit=25),
-    ], is_check_shapes=False)
-    return train_image_transform
+    ])
 
 def valid_transforms(img_size):
-    """
-    Transforms/augmentations for validation images and masks.
-
-    :param img_size: Integer, for image resize.
-    """
-    valid_image_transform = A.Compose([
-        A.Resize(img_size[1], img_size[0], always_apply=True),
-    ], is_check_shapes=False)
-    return valid_image_transform
+    return A.Compose([
+        A.Resize(img_size[1], img_size[0]),
+    ])
 
 class SegmentationDataset(Dataset):
-    def __init__(
-        self, 
-        image_paths, 
-        mask_paths, 
-        tfms, 
-        label_colors_list,
-        classes_to_train,
-        all_classes,
-        feature_extractor
-    ):
+    def __init__(self, image_paths, mask_paths, tfms, all_classes, classes_to_train, label_colors_list):
         self.image_paths = image_paths
         self.mask_paths = mask_paths
         self.tfms = tfms
+        self.class_values = set_class_values(all_classes, classes_to_train)
         self.label_colors_list = label_colors_list
-        self.all_classes = all_classes
-        self.classes_to_train = classes_to_train
-        self.class_values = set_class_values(
-            self.all_classes, self.classes_to_train
-        )
-        self.feature_extractor = feature_extractor
+        # pentru normalizare (aceleași medii și std-uri ca în SegFormer)
+        self.normalize = transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
 
     def __len__(self):
         return len(self.image_paths)
 
-    def __getitem__(self, index):
-        image = cv2.imread(self.image_paths[index], cv2.IMREAD_COLOR)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype('float32')
-        mask = cv2.imread(self.mask_paths[index], cv2.IMREAD_COLOR)
-        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB).astype('float32')
-        
-        # print(set( tuple(v) for m2d in mask for v in m2d ))
+    def __getitem__(self, idx):
+        img = cv2.cvtColor(cv2.imread(self.image_paths[idx]), cv2.COLOR_BGR2RGB)
+        mask = cv2.cvtColor(cv2.imread(self.mask_paths[idx]), cv2.COLOR_BGR2RGB)
 
-        transformed = self.tfms(image=image, mask=mask)
-        image = transformed['image'].astype('uint8')
-        mask = transformed['mask']
+        augmented = self.tfms(image=img, mask=mask)
+        img, mask = augmented['image'], augmented['mask']
 
-        # Get 2D label mask.
-        mask = get_label_mask(mask, self.class_values, self.label_colors_list).astype('uint8')
-        mask = Image.fromarray(mask)
-               
-        encoded_inputs = self.feature_extractor(
-            Image.fromarray(image), 
-            mask,
-            return_tensors='pt'
-        )
-        for k, v in encoded_inputs.items():
-            encoded_inputs[k].squeeze_()
+        # obţinem masca de etichete
+        label_mask = get_label_mask(mask, self.class_values, self.label_colors_list)
+        label_mask = torch.from_numpy(label_mask).long()
 
-        return encoded_inputs
+        # transformăm imaginea în tensor și normalizăm
+        img = torch.from_numpy(img).permute(2,0,1).float() / 255.0
+        img = self.normalize(img)
 
-def get_dataset(
-    train_image_paths, 
-    train_mask_paths,
-    valid_image_paths,
-    valid_mask_paths,
-    all_classes,
-    classes_to_train,
-    label_colors_list,
-    img_size,
-    feature_extractor
-):
-    train_tfms = train_transforms(img_size)
-    valid_tfms = valid_transforms(img_size)
+        return img, label_mask
 
-    train_dataset = SegmentationDataset(
-        train_image_paths,
-        train_mask_paths,
-        train_tfms,
-        label_colors_list,
-        classes_to_train,
-        all_classes, 
-        feature_extractor
-    )
-    valid_dataset = SegmentationDataset(
-        valid_image_paths,
-        valid_mask_paths,
-        valid_tfms,
-        label_colors_list,
-        classes_to_train,
-        all_classes,
-        feature_extractor
-    )
-    return train_dataset, valid_dataset
+def get_data_loaders(train_image_paths, train_mask_paths, valid_image_paths, valid_mask_paths,
+                     all_classes, classes_to_train, label_colors_list, img_size, batch_size, num_workers=8):
+    train_ds = SegmentationDataset(train_image_paths, train_mask_paths, train_transforms(img_size),
+                                   all_classes, classes_to_train, label_colors_list)  # :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
+    valid_ds = SegmentationDataset(valid_image_paths, valid_mask_paths, valid_transforms(img_size),
+                                   all_classes, classes_to_train, label_colors_list)
 
-def get_data_loaders(train_dataset, valid_dataset, batch_size):
-    train_data_loader = DataLoader(
-        train_dataset, 
-        batch_size=batch_size, 
-        drop_last=False, 
-        num_workers=2,
-        shuffle=True
-    )
-    valid_data_loader = DataLoader(
-        valid_dataset, 
-        batch_size=batch_size, 
-        drop_last=False, 
-        num_workers=2,
-        shuffle=False
-    )
-
-    return train_data_loader, valid_data_loader
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    valid_loader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    return train_loader, valid_loader
