@@ -1,3 +1,5 @@
+# python infer_image.py --input input/valid/images/ --device cpu --imgsz 1568 1088
+
 from transformers import (
     SegformerFeatureExtractor, 
     SegformerForSemanticSegmentation
@@ -34,11 +36,11 @@ parser.add_argument(
 )
 parser.add_argument(
     '--model',
-    default='outputs/model_iou'
+    default='out/outputs/model_iou'
 )
 args = parser.parse_args()
 
-out_dir = 'outputs/inference_results_image'
+out_dir = 'out/outputs/inference_results_image'
 os.makedirs(out_dir, exist_ok=True)
 
 extractor = SegformerFeatureExtractor()

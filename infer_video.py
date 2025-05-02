@@ -1,3 +1,5 @@
+# python infer_video.py --input input/inference_data/videos/video_3.mov --imgsz 800 600
+
 from transformers import (
     SegformerFeatureExtractor, 
     SegformerForSemanticSegmentation
@@ -35,12 +37,12 @@ parser.add_argument(
 )
 parser.add_argument(
     '--model',
-    default='outputs/model_iou'
+    default='out/outputs/model_iou'
 )
 args = parser.parse_args()
 
 # Create output directory if needed.
-out_dir = 'outputs/inference_results_video'
+out_dir = 'out/outputs/inference_results_video'
 os.makedirs(out_dir, exist_ok=True)
 
 # Load feature extractor and model from Hugging Face.
