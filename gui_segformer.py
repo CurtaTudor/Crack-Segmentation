@@ -28,8 +28,12 @@ class CrackSegApp:
         self.model.to(DEVICE).eval()
 
         # Buton pentru selectarea imaginii
-        btn = tk.Button(root, text="Select Image", command=self.select_image)
-        btn.pack(pady=10)
+        btn_img = tk.Button(root, text="Select Image", command=self.select_image)
+        btn_img.pack(pady=10)
+
+        # Buton pentru selectarea videoclipului
+        btn_vid = tk.Button(root, text="Select Video", command=self.select_video)
+        btn_vid.pack(pady=10)
 
         # Frame pentru a afișa imaginea originală în fereastra principală (opțional)
         frame = tk.Frame(root)
@@ -38,10 +42,10 @@ class CrackSegApp:
         self.label_orig.pack(side='left', padx=10, pady=10, expand=True)
 
     def select_image(self):
-        # Deschide dialogul de fișiere
+        # Deschide dialogul de fișiere pentru imagini
         path = filedialog.askopenfilename(
             title="Select an image",
-            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp"), ("All files", "*")]
+            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp"), ("All files", "*.*")]
         )
         if not path:
             return
@@ -53,45 +57,83 @@ class CrackSegApp:
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
         # Inferență
-        labels = predict(self.model, self.extractor, image_bgr, DEVICE)
+        labels = predict(self.model, self.extractor, image_rgb, DEVICE)
         seg_map = draw_segmentation_map(labels.cpu(), LABEL_COLORS_LIST)
-        #output = image_overlay(image_rgb, seg_map)
+        output = image_overlay(image_rgb, seg_map)
 
-        orig_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
-        seg_bgr  = cv2.cvtColor(seg_map,     cv2.COLOR_RGB2BGR)
-
-        #   blend 1.0 original + 0.5 segmentare
-        output = cv2.addWeighted(orig_bgr, 1.0, seg_bgr, 0.5, 0)
-
-        # Afișează originalul în fereastra principală (opțional)
-        #self.display_original(image_rgb)
         # Afișează original și rezultat în fereastră nouă
         self.display_result(image_rgb, output)
 
-    def display_original(self, orig_np):
-        orig = Image.fromarray(orig_np).resize((400, 400))
-        self.photo_orig = ImageTk.PhotoImage(orig)
-        self.label_orig.config(image=self.photo_orig, text="Original")
+    def select_video(self):
+        # Deschide dialogul de fișiere pentru videoclipuri
+        path = filedialog.askopenfilename(
+            title="Select a video",
+            filetypes=[("Video files", "*.mp4 *.mov *.avi *.mkv"), ("All files", "*.*")]
+        )
+        if not path:
+            return
 
-    def display_result(self, orig_np, seg_bgr_np):
-        # Creează o fereastră nouă
+        # Deschide captura video
+        cap = cv2.VideoCapture(path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if not fps or fps <= 0:
+            fps = 30
+        delay = int(1000 / fps)
+
+        # Fereastră nouă pentru video
+        top = tk.Toplevel(self.root)
+        top.title("Video Segmentation Result")
+        label_vid = tk.Label(top)
+        label_vid.pack()
+
+        def update_frame():
+            ret, frame = cap.read()
+            if not ret:
+                cap.release()
+                return
+
+            # Redimensionare și conversie la RGB
+            if IMGSZ:
+                frame = cv2.resize(frame, IMGSZ)
+            image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # Inferență pe fiecare cadru
+            labels = predict(self.model, self.extractor, image_rgb, DEVICE)
+            seg_map = draw_segmentation_map(labels.cpu(), LABEL_COLORS_LIST)
+            output = image_overlay(image_rgb, seg_map)
+
+            # Pregătire pentru afișare
+            output_rgb = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(output_rgb)
+            imgtk = ImageTk.PhotoImage(image=img)
+            label_vid.imgtk = imgtk
+            label_vid.config(image=imgtk)
+
+            # Afișează următorul cadru după delay
+            label_vid.after(delay, update_frame)
+
+        # Începe bucla de afișare
+        update_frame()
+
+    def display_result(self, orig_np, output_bgr_np):
+        # Creează o fereastră nouă pentru imagine
         top = tk.Toplevel(self.root)
         top.title("Original & Segmentation Result")
-        top.geometry("840x440")  # lățime dublă pentru două imagini
+        top.geometry("840x440")
 
-        # Prepare and display original image
+        # Original
         orig = Image.fromarray(orig_np).resize((400, 400))
         photo_orig = ImageTk.PhotoImage(orig)
         label_o = tk.Label(top, image=photo_orig, text="Original", compound='top')
-        label_o.image = photo_orig  # păstrează referința
+        label_o.image = photo_orig
         label_o.pack(side='left', padx=10, pady=10)
 
-        # Convert BGR OpenCV image to RGB and display segmentation
-        seg_rgb = cv2.cvtColor(seg_bgr_np, cv2.COLOR_BGR2RGB)
+        # Rezultat segmentare
+        seg_rgb = cv2.cvtColor(output_bgr_np, cv2.COLOR_BGR2RGB)
         seg = Image.fromarray(seg_rgb).resize((400, 400))
         photo_seg = ImageTk.PhotoImage(seg)
         label_s = tk.Label(top, image=photo_seg, text="Result", compound='top')
-        label_s.image = photo_seg  # păstrează referința
+        label_s.image = photo_seg
         label_s.pack(side='left', padx=10, pady=10)
 
 if __name__ == '__main__':
