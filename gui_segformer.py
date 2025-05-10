@@ -27,13 +27,17 @@ class CrackSegApp:
         self.model = SegformerForSemanticSegmentation.from_pretrained(MODEL_PATH)
         self.model.to(DEVICE).eval()
 
+        # Frame pentru butoane
+        buttons_frame = tk.Frame(root)
+        buttons_frame.pack(pady=10)
+
         # Buton pentru selectarea imaginii
-        btn_img = tk.Button(root, text="Select Image", command=self.select_image)
-        btn_img.pack(pady=10)
+        btn_img = tk.Button(buttons_frame, text="Select Image", command=self.select_image)
+        btn_img.pack(side='left', padx=5)
 
         # Buton pentru selectarea videoclipului
-        btn_vid = tk.Button(root, text="Select Video", command=self.select_video)
-        btn_vid.pack(pady=10)
+        btn_vid = tk.Button(buttons_frame, text="Select Video", command=self.select_video)
+        btn_vid.pack(side='left', padx=5)
 
         # Frame pentru a afișa imaginea originală în fereastra principală (opțional)
         frame = tk.Frame(root)
