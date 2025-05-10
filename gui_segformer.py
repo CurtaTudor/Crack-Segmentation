@@ -22,7 +22,6 @@ class CrackSegApp:
         root.geometry("900x600")
         root.minsize(600, 400)
 
-
         # Încarcă modelul
         self.extractor = SegformerFeatureExtractor()
         self.model = SegformerForSemanticSegmentation.from_pretrained(MODEL_PATH)
@@ -32,19 +31,11 @@ class CrackSegApp:
         btn = tk.Button(root, text="Select Image", command=self.select_image)
         btn.pack(pady=10)
 
-        # Frame pentru a afișa imaginile side-by-side
+        # Frame pentru a afișa imaginea originală în fereastra principală (opțional)
         frame = tk.Frame(root)
-        frame.pack()
-        self.label_orig = tk.Label(frame)
-        self.label_orig.pack(side='left', padx=5, pady=5)
-        self.label_pred = tk.Label(frame)
-        self.label_pred.pack(side='right', padx=5, pady=5)
-
-        # Label-uri pentru imagini cu text dedesubt
+        frame.pack(expand=True, fill='both')
         self.label_orig = tk.Label(frame, compound='top')
         self.label_orig.pack(side='left', padx=10, pady=10, expand=True)
-        self.label_pred = tk.Label(frame, compound='top')
-        self.label_pred.pack(side='right', padx=10, pady=10, expand=True)
 
     def select_image(self):
         # Deschide dialogul de fișiere
@@ -57,7 +48,6 @@ class CrackSegApp:
 
         # Citește și preprocesează imaginea
         image_bgr = cv2.imread(path)
-
         if IMGSZ:
             image_bgr = cv2.resize(image_bgr, IMGSZ)
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
@@ -65,24 +55,38 @@ class CrackSegApp:
         # Inferență
         labels = predict(self.model, self.extractor, image_bgr, DEVICE)
         seg_map = draw_segmentation_map(labels.cpu(), LABEL_COLORS_LIST)
-        output = image_overlay(image_bgr, seg_map)
+        output = image_overlay(image_rgb, seg_map)
 
-        # Afișează originalul și segmentarea
-        self.display(image_rgb, output)
+        # Afișează originalul în fereastra principală (opțional)
+        #self.display_original(image_rgb)
+        # Afișează original și rezultat în fereastră nouă
+        self.display_result(image_rgb, output)
 
-    def display(self, orig_np, seg_np):
-        # Convertire la PIL
-        orig = Image.fromarray(orig_np)
-        seg = Image.fromarray(seg_np)
-        # Redimensionare pentru afișare
-        orig = orig.resize((400, 400))
-        seg = seg.resize((400, 400))
-
-        # Transformare în PhotoImage și afișare
+    def display_original(self, orig_np):
+        orig = Image.fromarray(orig_np).resize((400, 400))
         self.photo_orig = ImageTk.PhotoImage(orig)
-        self.photo_seg = ImageTk.PhotoImage(seg)
         self.label_orig.config(image=self.photo_orig, text="Original")
-        self.label_pred.config(image=self.photo_seg, text="Result")
+
+    def display_result(self, orig_np, seg_bgr_np):
+        # Creează o fereastră nouă
+        top = tk.Toplevel(self.root)
+        top.title("Original & Segmentation Result")
+        top.geometry("840x440")  # lățime dublă pentru două imagini
+
+        # Prepare and display original image
+        orig = Image.fromarray(orig_np).resize((400, 400))
+        photo_orig = ImageTk.PhotoImage(orig)
+        label_o = tk.Label(top, image=photo_orig, text="Original", compound='top')
+        label_o.image = photo_orig  # păstrează referința
+        label_o.pack(side='left', padx=10, pady=10)
+
+        # Convert BGR OpenCV image to RGB and display segmentation
+        seg_rgb = cv2.cvtColor(seg_bgr_np, cv2.COLOR_BGR2RGB)
+        seg = Image.fromarray(seg_rgb).resize((400, 400))
+        photo_seg = ImageTk.PhotoImage(seg)
+        label_s = tk.Label(top, image=photo_seg, text="Result", compound='top')
+        label_s.image = photo_seg  # păstrează referința
+        label_s.pack(side='left', padx=10, pady=10)
 
 if __name__ == '__main__':
     root = tk.Tk()
