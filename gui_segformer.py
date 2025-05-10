@@ -55,7 +55,13 @@ class CrackSegApp:
         # Inferență
         labels = predict(self.model, self.extractor, image_bgr, DEVICE)
         seg_map = draw_segmentation_map(labels.cpu(), LABEL_COLORS_LIST)
-        output = image_overlay(image_rgb, seg_map)
+        #output = image_overlay(image_rgb, seg_map)
+
+        orig_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+        seg_bgr  = cv2.cvtColor(seg_map,     cv2.COLOR_RGB2BGR)
+
+        #   blend 1.0 original + 0.5 segmentare
+        output = cv2.addWeighted(orig_bgr, 1.0, seg_bgr, 0.5, 0)
 
         # Afișează originalul în fereastra principală (opțional)
         #self.display_original(image_rgb)
