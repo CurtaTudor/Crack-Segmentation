@@ -147,10 +147,10 @@ class CrackSegApp:
         # Creează o fereastră nouă pentru imagine
         top = tk.Toplevel(self.root)
         top.title("Original & Segmentation Result")
-        top.geometry("840x440")
+        top.geometry("1124x640")
 
         # Original
-        orig = Image.fromarray(orig_np).resize((400, 400))
+        orig = Image.fromarray(orig_np).resize((520, 520))
         photo_orig = ImageTk.PhotoImage(orig)
         label_o = tk.Label(top, image=photo_orig, text="Original", compound='top')
         label_o.image = photo_orig
@@ -158,7 +158,7 @@ class CrackSegApp:
 
         # Rezultat segmentare
         seg_rgb = cv2.cvtColor(output_bgr_np, cv2.COLOR_BGR2RGB)
-        seg = Image.fromarray(seg_rgb).resize((400, 400))
+        seg = Image.fromarray(seg_rgb).resize((520, 520))
         photo_seg = ImageTk.PhotoImage(seg)
         label_s = tk.Label(top, image=photo_seg, text="Result", compound='top')
         label_s.image = photo_seg
