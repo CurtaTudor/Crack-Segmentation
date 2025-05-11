@@ -12,8 +12,6 @@ from utils import draw_segmentation_map, image_overlay, predict
 DEVICE = 'cpu'
 # Dimensiune fixă la care redimensionăm (sau None pentru original)
 IMGSZ = (1568, 1088)
-# Calea către modelul salvat
-MODEL_PATH = 'out/outputs/model_iou'
 
 class CrackSegApp:
     def __init__(self, root):
@@ -22,14 +20,31 @@ class CrackSegApp:
         root.geometry("900x600")
         root.minsize(600, 400)
 
-        # Încarcă modelul
+        # Dicționar de modele disponibile
+        self.model_paths = {
+            'Segformer Model': 'out/outputs/model_iou',
+            'Segformer Pothole Model': 'out/outputs_pot/model_iou'
+        }
+        # Inițializare extractor și model implicit
         self.extractor = SegformerFeatureExtractor()
-        self.model = SegformerForSemanticSegmentation.from_pretrained(MODEL_PATH)
+        default_path = self.model_paths['Segformer Model']
+        self.model = SegformerForSemanticSegmentation.from_pretrained(default_path)
         self.model.to(DEVICE).eval()
 
         # Frame pentru butoane
         buttons_frame = tk.Frame(root)
         buttons_frame.pack(pady=10)
+
+        # Dropdown pentru selecția modelului
+        self.selected_model = tk.StringVar()
+        self.selected_model.set('Segformer Model')
+        model_menu = tk.OptionMenu(
+            buttons_frame,
+            self.selected_model,
+            *self.model_paths.keys(),
+            command=self.change_model
+        )
+        model_menu.pack(side='left', padx=5)
 
         # Buton pentru selectarea imaginii
         btn_img = tk.Button(buttons_frame, text="Select Image", command=self.select_image)
@@ -44,6 +59,15 @@ class CrackSegApp:
         frame.pack(expand=True, fill='both')
         self.label_orig = tk.Label(frame, compound='top')
         self.label_orig.pack(side='left', padx=10, pady=10, expand=True)
+
+    def change_model(self, selection):
+        """
+        Callback la schimbarea modelului din dropdown.
+        """
+        model_path = self.model_paths[selection]
+        # Încarcă noul model
+        self.model = SegformerForSemanticSegmentation.from_pretrained(model_path)
+        self.model.to(DEVICE).eval()
 
     def select_image(self):
         # Deschide dialogul de fișiere pentru imagini

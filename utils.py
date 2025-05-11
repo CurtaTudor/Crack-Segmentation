@@ -238,14 +238,16 @@ def draw_segmentation_map(labels, palette):
 def image_overlay(image, segmented_image):
     """
     :param image: Image in RGB format.
-    :param segmented_image: Segmentation map in RGB format. 
+    :param segmented_image: Segmentation map in RGB format.
     """
-    alpha = 0.8 # transparency for the original image
-    beta = 1.0 # transparency for the segmentation map
-    gamma = 0 # scalar added to each sum
+    alpha = 1.0   # imaginea originală la 100%
+    beta  = 0.8   # segmentarea la  80%
+    gamma = 0
 
-    segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_RGB2BGR)
-    image = np.array(image)
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    cv2.addWeighted(image, alpha, segmented_image, beta, gamma, image)
-    return image
+    # convertește la BGR pentru cv2
+    seg_bgr = cv2.cvtColor(segmented_image, cv2.COLOR_RGB2BGR)
+    img_bgr = cv2.cvtColor(np.array(image),    cv2.COLOR_RGB2BGR)
+
+    # suprapune imaginea originală (full) cu segmentarea (partial)
+    output = cv2.addWeighted(img_bgr, alpha, seg_bgr, beta, gamma)
+    return output
