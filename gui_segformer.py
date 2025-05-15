@@ -3,6 +3,9 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 import cv2
 import numpy as np
+import subprocess, json
+from hachoir.parser import createParser
+from hachoir.metadata import extractMetadata
 
 from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
 from config import VIS_LABEL_MAP as LABEL_COLORS_LIST
@@ -11,7 +14,28 @@ from utils import draw_segmentation_map, image_overlay, predict
 # Dispozitivul pe care rulează modelul ("cuda:0" sau "cpu")
 DEVICE = 'cpu'
 # Dimensiune fixă la care redimensionăm (sau None pentru original)
-IMGSZ = (1568, 1088)
+IMGSZ = (480, 848)
+
+def get_rotation(path):
+    """Returnează rotația video (0, 90, 180, 270) din metadata fără FFmpeg."""
+
+    angle = 0
+    cap_test = cv2.VideoCapture(path)
+    ret, frame0 = cap_test.read()
+    cap_test.release()
+    if frame0.shape[0] > frame0.shape[1]:
+        angle = 90
+    return angle
+
+def rotate_frame(frame, angle):
+    """Rotește cadrul conform unghiului (același ca înainte)."""
+    if angle == 90:
+        return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    elif angle == 180:
+        return cv2.rotate(frame, cv2.ROTATE_180)
+    elif angle == 270:
+        return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
 
 class CrackSegApp:
     def __init__(self, root):
@@ -103,6 +127,7 @@ class CrackSegApp:
 
         # Deschide captura video
         cap = cv2.VideoCapture(path)
+        rotation = get_rotation(path)
         fps = cap.get(cv2.CAP_PROP_FPS)
         if not fps or fps <= 0:
             fps = 30
@@ -120,9 +145,12 @@ class CrackSegApp:
                 cap.release()
                 return
 
+            frame = rotate_frame(frame, rotation)
             # Redimensionare și conversie la RGB
-            if IMGSZ:
-                frame = cv2.resize(frame, IMGSZ)
+            MAX_W, MAX_H = 1568, 1088
+            h, w = frame.shape[:2]
+            if w > MAX_W or h > MAX_H:
+                frame = cv2.resize(frame, (MAX_W, MAX_H))
             image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             # Inferență pe fiecare cadru
