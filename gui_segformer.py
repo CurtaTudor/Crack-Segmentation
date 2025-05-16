@@ -3,10 +3,6 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 import cv2
 import numpy as np
-import subprocess, json
-from hachoir.parser import createParser
-from hachoir.metadata import extractMetadata
-
 from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
 from config import VIS_LABEL_MAP as LABEL_COLORS_LIST
 from utils import draw_segmentation_map, image_overlay, predict
