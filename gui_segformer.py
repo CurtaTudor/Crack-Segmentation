@@ -14,21 +14,20 @@ from utils import draw_segmentation_map, image_overlay, predict
 # Dispozitivul pe care rulează modelul ("cuda:0" sau "cpu")
 DEVICE = 'cpu'
 # Dimensiune fixă la care redimensionăm (sau None pentru original)
-IMGSZ = (480, 848)
+IMGSZ = (1568, 1088)
 
 def get_rotation(path):
-    """Returnează rotația video (0, 90, 180, 270) din metadata fără FFmpeg."""
 
     angle = 0
     cap_test = cv2.VideoCapture(path)
     ret, frame0 = cap_test.read()
     cap_test.release()
-    if frame0.shape[0] > frame0.shape[1]:
+    print(frame0.shape[0], frame0.shape[1])
+    if frame0.shape[0] < 1000 and frame0.shape[1] < 1000 and frame0.shape[0] < frame0.shape[1]:
         angle = 90
     return angle
 
 def rotate_frame(frame, angle):
-    """Rotește cadrul conform unghiului (același ca înainte)."""
     if angle == 90:
         return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
     elif angle == 180:
