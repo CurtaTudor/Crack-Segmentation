@@ -29,6 +29,11 @@ def train_transforms(img_size):
         A.HorizontalFlip(p=0.5),
         A.RandomBrightnessContrast(p=0.2),
         A.Rotate(limit=25),
+        A.VerticalFlip(p=0.5),
+        A.GaussNoise(p=0.2),
+        A.RandomCrop(width=img_size[0], height=img_size[1], p=0.5),
+        A.ElasticTransform(p=0.2),
+
     ], is_check_shapes=False)
     return train_image_transform
 

@@ -8,7 +8,7 @@ from config import ALL_CLASSES, LABEL_COLORS_LIST
 from transformers import SegformerFeatureExtractor
 from engine import train, validate
 from utils import save_model, SaveBestModel, save_plots, SaveBestModelIOU
-from torch.optim.lr_scheduler import MultiStepLR
+from torch.optim.lr_scheduler import MultiStepLR, OneCycleLR
 
 seed = 42
 torch.manual_seed(seed)
@@ -103,8 +103,16 @@ if __name__ == '__main__':
     save_best_model = SaveBestModel()
     save_best_iou = SaveBestModelIOU()
     # LR Scheduler.
-    scheduler = MultiStepLR(
-        optimizer, milestones=args.scheduler_epochs, gamma=0.1, verbose=True
+    steps_per_epoch = len(train_dataloader)
+    scheduler = OneCycleLR(
+        optimizer,
+        max_lr = args.lr * 10,
+        epochs = args.epochs,
+        steps_per_epoch = steps_per_epoch,
+        pct_start = 0.3,
+        anneal_strategy = 'cos',
+        final_div_factor = 1e4,
+        verbose = True
     )
 
     train_loss, train_pix_acc, train_miou = [], [], []
