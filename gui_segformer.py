@@ -74,11 +74,24 @@ class CrackSegApp:
             self.extractor = (self.base_extractor if selection=='Segformer Model' else self.pot_extractor)
             self.model = (self.base_model if selection=='Segformer Model' else self.pot_model)
         else:
-            with open(cfg['config'], 'r') as f: js=json.load(f)
-            num_classes = len(js.get('id2label', js.get('classes', js.get('num_labels'))))
-            model = smp.Unet(encoder_name=js.get('encoder_name','resnet34'), encoder_weights=js.get('encoder_weights','imagenet'), in_channels=3, classes=num_classes, activation=None)
+            with open(cfg['config'], 'r') as f:
+                js = json.load(f)
+            var = js.get('id2label') or js.get('classes') or js.get('num_labels')
+            if isinstance(var, int):
+                num_classes = var
+            else:
+                num_classes = len(var)
+            model = smp.Unet(
+                encoder_name=js.get('encoder_name', 'resnet34'),
+                encoder_weights=js.get('encoder_weights', 'imagenet'),
+                in_channels=3,
+                classes=num_classes,
+                activation=None
+            )
             model.load_state_dict(load_file(cfg['weights']))
-            model.to(DEVICE).eval(); self.extractor=None; self.model=model
+            model.to(DEVICE).eval()
+            self.extractor=None
+            self.model=model
 
     def change_model(self, selection): self.load_model(selection)
 
@@ -120,7 +133,8 @@ class CrackSegApp:
             h,w=frame.shape[:2]
             if w>IMGSZ[0] or h>IMGSZ[1]: frame=cv2.resize(frame,IMGSZ)
             img_rgb=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
-            if self.frame_count%2==0:
+            #Inferenta pe cadre
+            if self.frame_count%1==0:
                 sel=self.selected_model.get()
                 if sel=='Segformer Model':
                     base=predict(self.base_model,self.base_extractor,img_rgb,DEVICE).cpu().numpy()
