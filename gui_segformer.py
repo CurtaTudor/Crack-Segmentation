@@ -11,9 +11,9 @@ from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmenta
 from config import VIS_LABEL_MAP as LABEL_COLORS_LIST
 from utils import draw_segmentation_map, image_overlay, predict
 
-# Dispozitivul pe care rulează modelul ("cuda:0" sau "cpu")
+# Device ("cuda:0" sau "cpu")
 DEVICE = 'cpu'
-# Dimensiune fixă la care redimensionăm (sau None pentru original)
+# Image Size
 IMGSZ = (1568, 1088)
 
 def get_rotation(path):
@@ -21,8 +21,7 @@ def get_rotation(path):
     cap_test = cv2.VideoCapture(path)
     ret, frame0 = cap_test.read()
     cap_test.release()
-    print(frame0.shape[0], frame0.shape[1])
-    if frame0.shape[0] < 1000 and frame0.shape[1] < 1000 and frame0.shape[0] < frame0.shape[1]:
+    if frame0 is not None and frame0.shape[0] < 1000 and frame0.shape[1] < 1000 and frame0.shape[0] < frame0.shape[1]:
         angle = 90
     return angle
 
@@ -38,67 +37,32 @@ def rotate_frame(frame, angle):
 class CrackSegApp:
     def __init__(self, root):
         self.root = root
-        root.title("Crack Detection - SegFormer & UNet")
+        root.title("Crack Detection")
         root.geometry("900x600")
         root.minsize(600, 400)
 
-        # Configurații modele disponibile
         self.model_configs = {
-            'Segformer Model': {
-                'type': 'segformer',
-                'path': 'out/outputs/model_iou'
-            },
-            'Segformer Pothole Model': {
-                'type': 'segformer',
-                'path': 'out/outputs_pot/model_iou'
-            },
-            'UNet Model': {
-                'type': 'unet',
-                'config': 'out/outputs_unet/final_model/config.json',
-                'weights': 'out/outputs_unet/final_model/model.safetensors'
-            }
+            'Segformer Model': {'type': 'segformer', 'path': 'out/outputs/model_iou'},
+            'Segformer Pothole Model': {'type': 'segformer', 'path': 'out/outputs_pot/model_iou'},
+            'UNet Model': {'type': 'unet', 'config': 'out/outputs_unet/final_model/config.json', 'weights': 'out/outputs_unet/final_model/model.safetensors'}
         }
 
-        # Preload SegFormer models
         self.base_extractor = SegformerFeatureExtractor()
-        self.base_model = SegformerForSemanticSegmentation.from_pretrained(
-            self.model_configs['Segformer Model']['path']
-        )
+        self.base_model = SegformerForSemanticSegmentation.from_pretrained(self.model_configs['Segformer Model']['path'])
         self.base_model.to(DEVICE).eval()
-
         self.pot_extractor = SegformerFeatureExtractor()
-        self.pot_model = SegformerForSemanticSegmentation.from_pretrained(
-            self.model_configs['Segformer Pothole Model']['path']
-        )
+        self.pot_model = SegformerForSemanticSegmentation.from_pretrained(self.model_configs['Segformer Pothole Model']['path'])
         self.pot_model.to(DEVICE).eval()
 
-        # Încarcă modelul implicit (pointeri către extractor și model)
-        self.selected_model = tk.StringVar()
-        self.selected_model.set('Segformer Model')
+        self.selected_model = tk.StringVar(value='Segformer Model')
         self.load_model('Segformer Model')
 
-        # Frame pentru butoane
-        buttons_frame = tk.Frame(root)
-        buttons_frame.pack(pady=10)
+        btn_frame = tk.Frame(root)
+        btn_frame.pack(pady=10)
+        tk.OptionMenu(btn_frame, self.selected_model, *self.model_configs.keys(), command=self.change_model).pack(side='left', padx=5)
+        tk.Button(btn_frame, text="Select Image", command=self.select_image).pack(side='left', padx=5)
+        tk.Button(btn_frame, text="Select Video", command=self.select_video).pack(side='left', padx=5)
 
-        # Dropdown pentru selecția modelului
-        model_menu = tk.OptionMenu(
-            buttons_frame,
-            self.selected_model,
-            *self.model_configs.keys(),
-            command=self.change_model
-        )
-        model_menu.pack(side='left', padx=5)
-
-        # Buton pentru selectarea imaginii
-        btn_img = tk.Button(buttons_frame, text="Select Image", command=self.select_image)
-        btn_img.pack(side='left', padx=5)
-
-        # Buton pentru selectarea videoclipului
-        btn_vid = tk.Button(buttons_frame, text="Select Video", command=self.select_video)
-        btn_vid.pack(side='left', padx=5)
-
-        # Frame pentru afișarea imaginii originale
         frame = tk.Frame(root)
         frame.pack(expand=True, fill='both')
         self.label_orig = tk.Label(frame, compound='top')
@@ -107,169 +71,113 @@ class CrackSegApp:
     def load_model(self, selection):
         cfg = self.model_configs[selection]
         if cfg['type'] == 'segformer':
-            # set pointers based on selection
-            if selection == 'Segformer Model':
-                self.extractor = self.base_extractor
-                self.model = self.base_model
-            else:
-                self.extractor = self.pot_extractor
-                self.model = self.pot_model
+            self.extractor = (self.base_extractor if selection=='Segformer Model' else self.pot_extractor)
+            self.model = (self.base_model if selection=='Segformer Model' else self.pot_model)
         else:
-            # UNet
-            self.extractor = None
-            # Încarcă configurația UNet
-            with open(cfg['config'], 'r') as f:
-                js = json.load(f)
-            # Determină numărul de clase
-            if 'id2label' in js:
-                num_classes = len(js['id2label'])
-            elif 'classes' in js and isinstance(js['classes'], list):
-                num_classes = len(js['classes'])
-            elif 'classes' in js and isinstance(js['classes'], int):
-                num_classes = js['classes']
-            elif 'num_labels' in js:
-                num_classes = js['num_labels']
-            else:
-                raise ValueError("config.json trebuie să conțină 'id2label', 'classes' sau 'num_labels'")
-            encoder_name = js.get('encoder_name', 'resnet34')
-            encoder_weights = js.get('encoder_weights', 'imagenet')
-            # Instanțiază UNet
-            model = smp.Unet(
-                encoder_name=encoder_name,
-                encoder_weights=encoder_weights,
-                in_channels=3,
-                classes=num_classes,
-                activation=None
-            )
-            # Încarcă greutăți
-            state_dict = load_file(cfg['weights'])
-            model.load_state_dict(state_dict)
-            model.to(DEVICE).eval()
-            self.model = model
+            with open(cfg['config'], 'r') as f: js=json.load(f)
+            num_classes = len(js.get('id2label', js.get('classes', js.get('num_labels'))))
+            model = smp.Unet(encoder_name=js.get('encoder_name','resnet34'), encoder_weights=js.get('encoder_weights','imagenet'), in_channels=3, classes=num_classes, activation=None)
+            model.load_state_dict(load_file(cfg['weights']))
+            model.to(DEVICE).eval(); self.extractor=None; self.model=model
 
-    def change_model(self, selection):
-        self.load_model(selection)
+    def change_model(self, selection): self.load_model(selection)
 
     def select_image(self):
-        path = filedialog.askopenfilename(
-            title="Select an image",
-            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp"), ("All files", "*.*")]
-        )
-        if not path:
-            return
-
-        image_bgr = cv2.imread(path)
-        if IMGSZ:
-            image_bgr = cv2.resize(image_bgr, IMGSZ)
-        image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-
-        sel = self.selected_model.get()
-        # Inferență și mapare culori
-        if sel == 'Segformer Model':
-            # Predict both
-            labels_base = predict(self.base_model, self.base_extractor, image_rgb, DEVICE)
-            labels_pot = predict(self.pot_model, self.pot_extractor, image_rgb, DEVICE)
-            base_np = labels_base.cpu().numpy()
-            pot_np = labels_pot.cpu().numpy()
-            # Segmentation map for base
-            seg_base = draw_segmentation_map(base_np, LABEL_COLORS_LIST)
-            # Red mask for potholes
-            pot_mask = pot_np > 0
-            seg_base[pot_mask] = [255, 0, 0]
-            seg_map = seg_base
-        elif sel == 'Segformer Pothole Model':
-            labels = predict(self.pot_model, self.pot_extractor, image_rgb, DEVICE)
-            labels_np = labels.cpu().numpy()
-            # Create red segmentation map
-            seg_map = np.zeros_like(image_rgb, dtype=np.uint8)
-            seg_map[labels_np > 0] = [255, 0, 0]
+        path = filedialog.askopenfilename(title="Select an image", filetypes=[("Image files","*.jpg *.jpeg *.png *.bmp"),("All files","*.*")])
+        if not path: return
+        img_bgr=cv2.imread(path)
+        if IMGSZ: img_bgr=cv2.resize(img_bgr,IMGSZ)
+        img_rgb=cv2.cvtColor(img_bgr,cv2.COLOR_BGR2RGB)
+        sel=self.selected_model.get()
+        if sel=='Segformer Model':
+            lb=predict(self.base_model,self.base_extractor,img_rgb,DEVICE).cpu().numpy()
+            lp=predict(self.pot_model,self.pot_extractor,img_rgb,DEVICE).cpu().numpy()
+            seg=draw_segmentation_map(lb,LABEL_COLORS_LIST)
+            seg[lp>0]=[255,0,0]
+        elif sel=='Segformer Pothole Model':
+            lp=predict(self.pot_model,self.pot_extractor,img_rgb,DEVICE).cpu().numpy()
+            seg=np.zeros_like(img_rgb,dtype=np.uint8)
+            seg[lp>0]=[255,0,0]
         else:
-            # UNet inference
-            inp = torch.from_numpy(image_rgb.transpose(2,0,1)).float() / 255.0
-            inp = inp.unsqueeze(0).to(DEVICE)
-            with torch.no_grad():
-                logits = self.model(inp)
-            labels_np = logits.argmax(dim=1).squeeze().cpu().numpy()
-            seg_map = draw_segmentation_map(labels_np, LABEL_COLORS_LIST)
-
-        output = image_overlay(image_rgb, seg_map)
-        self.display_result(image_rgb, output)
+            inp=torch.from_numpy(img_rgb.transpose(2,0,1)).float()/255.0
+            inp=inp.unsqueeze(0).to(DEVICE)
+            lbls=self.model(inp).argmax(1).squeeze().cpu().numpy()
+            seg=draw_segmentation_map(lbls,LABEL_COLORS_LIST)
+        output=image_overlay(img_rgb,seg)
+        self.display_result(img_rgb,output)
 
     def select_video(self):
-        path = filedialog.askopenfilename(
-            title="Select a video",
-            filetypes=[("Video files", "*.mp4 *.mov *.avi *.mkv"), ("All files", "*.*")]
-        )
-        if not path:
-            return
-
-        cap = cv2.VideoCapture(path)
-        rotation = get_rotation(path)
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30
-        delay = int(1000 / fps)
-
-        self.frame_count = 0
-        top = tk.Toplevel(self.root)
-        top.title("Video Segmentation Result")
-        label_vid = tk.Label(top)
-        label_vid.pack()
-
-        def update_frame():
-            ret, frame = cap.read()
-            if not ret:
-                cap.release()
-                return
-
-            self.frame_count += 1
-            frame = rotate_frame(frame, rotation)
-            MAX_W, MAX_H = IMGSZ
-            h, w = frame.shape[:2]
-            if w > MAX_W or h > MAX_H:
-                frame = cv2.resize(frame, (MAX_W, MAX_H))
-            image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            # Inferenta pe cadre
-            if self.frame_count % 1 == 0:
-                sel = self.selected_model.get()
-                if sel == 'Segformer Model':
-                    lb = predict(self.base_model, self.base_extractor, image_rgb, DEVICE)
-                    lp = predict(self.pot_model, self.pot_extractor, image_rgb, DEVICE)
-                    base_np = lb.cpu().numpy()
-                    pot_np = lp.cpu().numpy()
-                    seg_base = draw_segmentation_map(base_np, LABEL_COLORS_LIST)
-                    pot_mask = pot_np > 0
-                    seg_base[pot_mask] = [255, 0, 0]
-                    labels_np = seg_base
-                elif sel == 'Segformer Pothole Model':
-                    l = predict(self.pot_model, self.pot_extractor, image_rgb, DEVICE)
-                    pot_np = l.cpu().numpy()
-                    seg_base = np.zeros_like(image_rgb, dtype=np.uint8)
-                    seg_base[pot_np > 0] = [255, 0, 0]
-                    labels_np = seg_base
+        path=filedialog.askopenfilename(title="Select a video",filetypes=[("Video files","*.mp4 *.mov *.avi *.mkv"),("All files","*.*")])
+        if not path: return
+        cap=cv2.VideoCapture(path);rot=get_rotation(path)
+        fps=cap.get(cv2.CAP_PROP_FPS) or 30; delay=int(1000/fps)
+        self.frame_count=0; top=tk.Toplevel(self.root); top.title("Video Segmentation Result")
+        lbl=tk.Label(top); lbl.pack()
+        def update():
+            ret,frame=cap.read()
+            if not ret: cap.release(); return
+            self.frame_count+=1; frame=rotate_frame(frame,rot)
+            h,w=frame.shape[:2]
+            if w>IMGSZ[0] or h>IMGSZ[1]: frame=cv2.resize(frame,IMGSZ)
+            img_rgb=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
+            if self.frame_count%2==0:
+                sel=self.selected_model.get()
+                if sel=='Segformer Model':
+                    base=predict(self.base_model,self.base_extractor,img_rgb,DEVICE).cpu().numpy()
+                    pot=predict(self.pot_model,self.pot_extractor,img_rgb,DEVICE).cpu().numpy()
+                    seg_map=draw_segmentation_map(base,LABEL_COLORS_LIST); seg_map[pot>0]=[255,0,0]
+                elif sel=='Segformer Pothole Model':
+                    pot=predict(self.pot_model,self.pot_extractor,img_rgb,DEVICE).cpu().numpy()
+                    seg_map=np.zeros_like(img_rgb,dtype=np.uint8); seg_map[pot>0]=[255,0,0]
                 else:
-                    inp = torch.from_numpy(image_rgb.transpose(2,0,1)).float() / 255.0
-                    inp = inp.unsqueeze(0).to(DEVICE)
-                    with torch.no_grad():
-                        logits = self.model(inp)
-                    labels = logits.argmax(dim=1).squeeze().cpu().numpy()
-                    labels_np = draw_segmentation_map(labels, LABEL_COLORS_LIST)
-
-                output = image_overlay(image_rgb, labels_np)
-                output_display = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
+                    inp=torch.from_numpy(img_rgb.transpose(2,0,1)).float()/255.0
+                    inp=inp.unsqueeze(0).to(DEVICE)
+                    lbls=self.model(inp).argmax(1).squeeze().cpu().numpy()
+                    seg_map=draw_segmentation_map(lbls,LABEL_COLORS_LIST)
+                out=image_overlay(img_rgb,seg_map); display=cv2.cvtColor(out,cv2.COLOR_BGR2RGB)
             else:
-                output_display = image_rgb
-
-            img = Image.fromarray(output_display)
-            imgtk = ImageTk.PhotoImage(image=img)
-            label_vid.imgtk = imgtk
-            label_vid.config(image=imgtk)
-            label_vid.after(delay, update_frame)
-
-        update_frame()
+                display=img_rgb
+            im=Image.fromarray(display); imgtk=ImageTk.PhotoImage(im)
+            lbl.imgtk=imgtk; lbl.config(image=imgtk)
+            lbl.after(delay,update)
+        update()
 
     def display_result(self, orig_np, output_bgr_np):
+        legend = [('Crack', (0, 255, 0)), ('Pothole', (0, 0, 255))]
+        box_w, box_h = 40, 40
+        padding = 20
+        font_scale = 1.0
+        thickness = 3
+  
+        start_x = padding
+        start_y = padding
+        legend_w = box_w + padding + 150
+        legend_h = len(legend) * (box_h + padding) + padding - 20
+    
+        overlay = output_bgr_np.copy()
+        cv2.rectangle(overlay,
+                      (start_x - padding//2, start_y - padding//2),
+                      (start_x + legend_w, start_y + legend_h),
+                      (255, 255, 255), -1)
+        cv2.addWeighted(overlay, 0.7, output_bgr_np, 0.3, 0, output_bgr_np)
+  
+        cv2.rectangle(output_bgr_np,
+                      (start_x - padding//2, start_y - padding//2),
+                      (start_x + legend_w, start_y + legend_h),
+                      (0, 0, 0), thickness)
+ 
+        for idx, (lbl, col) in enumerate(legend):
+            y = start_y + idx * (box_h + padding)
+            cv2.rectangle(output_bgr_np,
+                          (start_x, y),
+                          (start_x + box_w, y + box_h),
+                          col, -1)
+            cv2.putText(output_bgr_np, lbl,
+                        (start_x + box_w + padding, y + box_h - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness)
+
         top = tk.Toplevel(self.root)
-        top.title("Original & Segmentation Result")
+        top.title("Inference result")
         top.geometry("1124x640")
 
         orig = Image.fromarray(orig_np).resize((520, 520))
