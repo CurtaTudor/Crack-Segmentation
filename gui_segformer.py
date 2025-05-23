@@ -39,7 +39,7 @@ def rotate_frame(frame, angle):
 class CrackSegApp:
     def __init__(self, root):
         self.root = root
-        root.title("Crack Detection")
+        root.title("Crack Detection - SegFormer & UNet")
         root.geometry("900x600")
         root.minsize(600, 400)
 
@@ -179,6 +179,9 @@ class CrackSegApp:
         fps = cap.get(cv2.CAP_PROP_FPS) or 30
         delay = int(1000 / fps)
 
+        # Contor pentru cadre
+        self.frame_count = 0
+
         top = tk.Toplevel(self.root)
         top.title("Video Segmentation Result")
         label_vid = tk.Label(top)
@@ -190,29 +193,36 @@ class CrackSegApp:
                 cap.release()
                 return
 
+            self.frame_count += 1
+            # Rotire și redimensionare
             frame = rotate_frame(frame, rotation)
-            MAX_W, MAX_H = 1568, 1088
+            MAX_W, MAX_H = IMGSZ
             h, w = frame.shape[:2]
             if w > MAX_W or h > MAX_H:
                 frame = cv2.resize(frame, (MAX_W, MAX_H))
             image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # Inferență pe fiecare cadru
-            if self.extractor is not None:
-                labels = predict(self.model, self.extractor, image_rgb, DEVICE)
-                labels_np = labels.cpu()
+            # Inference doar la fiecare 1 cadre
+            if self.frame_count % 1 == 0:
+                if self.extractor is not None:
+                    labels = predict(self.model, self.extractor, image_rgb, DEVICE)
+                    labels_np = labels.cpu()
+                else:
+                    inp = torch.from_numpy(image_rgb.transpose(2,0,1)).float() / 255.0
+                    inp = inp.unsqueeze(0).to(DEVICE)
+                    with torch.no_grad():
+                        logits = self.model(inp)
+                    labels_np = logits.argmax(dim=1).squeeze().cpu().numpy()
+
+                seg_map = draw_segmentation_map(labels_np, LABEL_COLORS_LIST)
+                output = image_overlay(image_rgb, seg_map)
+                # Convertire rezultat pentru afișare
+                output_display = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
             else:
-                inp = torch.from_numpy(image_rgb.transpose(2,0,1)).float() / 255.0
-                inp = inp.unsqueeze(0).to(DEVICE)
-                with torch.no_grad():
-                    logits = self.model(inp)
-                labels_np = logits.argmax(dim=1).squeeze().cpu().numpy()
+                # Afișează imaginea originală fără segmentare
+                output_display = image_rgb
 
-            seg_map = draw_segmentation_map(labels_np, LABEL_COLORS_LIST)
-            output = image_overlay(image_rgb, seg_map)
-
-            output_rgb = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(output_rgb)
+            img = Image.fromarray(output_display)
             imgtk = ImageTk.PhotoImage(image=img)
             label_vid.imgtk = imgtk
             label_vid.config(image=imgtk)
