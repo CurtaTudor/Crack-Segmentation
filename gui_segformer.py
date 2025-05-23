@@ -17,7 +17,6 @@ DEVICE = 'cpu'
 IMGSZ = (1568, 1088)
 
 def get_rotation(path):
-
     angle = 0
     cap_test = cv2.VideoCapture(path)
     ret, frame0 = cap_test.read()
@@ -60,7 +59,20 @@ class CrackSegApp:
             }
         }
 
-        # Încarcă modelul implicit
+        # Preload SegFormer models
+        self.base_extractor = SegformerFeatureExtractor()
+        self.base_model = SegformerForSemanticSegmentation.from_pretrained(
+            self.model_configs['Segformer Model']['path']
+        )
+        self.base_model.to(DEVICE).eval()
+
+        self.pot_extractor = SegformerFeatureExtractor()
+        self.pot_model = SegformerForSemanticSegmentation.from_pretrained(
+            self.model_configs['Segformer Pothole Model']['path']
+        )
+        self.pot_model.to(DEVICE).eval()
+
+        # Încarcă modelul implicit (pointeri către extractor și model)
         self.selected_model = tk.StringVar()
         self.selected_model.set('Segformer Model')
         self.load_model('Segformer Model')
@@ -95,10 +107,13 @@ class CrackSegApp:
     def load_model(self, selection):
         cfg = self.model_configs[selection]
         if cfg['type'] == 'segformer':
-            # SegFormer
-            self.extractor = SegformerFeatureExtractor()
-            self.model = SegformerForSemanticSegmentation.from_pretrained(cfg['path'])
-            self.model.to(DEVICE).eval()
+            # set pointers based on selection
+            if selection == 'Segformer Model':
+                self.extractor = self.base_extractor
+                self.model = self.base_model
+            else:
+                self.extractor = self.pot_extractor
+                self.model = self.pot_model
         else:
             # UNet
             self.extractor = None
@@ -148,22 +163,36 @@ class CrackSegApp:
             image_bgr = cv2.resize(image_bgr, IMGSZ)
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
-        # Inferență
-        if self.extractor is not None:
-            # SegFormer
-            labels = predict(self.model, self.extractor, image_rgb, DEVICE)
-            labels_np = labels.cpu()
+        sel = self.selected_model.get()
+        # Inferență și mapare culori
+        if sel == 'Segformer Model':
+            # Predict both
+            labels_base = predict(self.base_model, self.base_extractor, image_rgb, DEVICE)
+            labels_pot = predict(self.pot_model, self.pot_extractor, image_rgb, DEVICE)
+            base_np = labels_base.cpu().numpy()
+            pot_np = labels_pot.cpu().numpy()
+            # Segmentation map for base
+            seg_base = draw_segmentation_map(base_np, LABEL_COLORS_LIST)
+            # Red mask for potholes
+            pot_mask = pot_np > 0
+            seg_base[pot_mask] = [255, 0, 0]
+            seg_map = seg_base
+        elif sel == 'Segformer Pothole Model':
+            labels = predict(self.pot_model, self.pot_extractor, image_rgb, DEVICE)
+            labels_np = labels.cpu().numpy()
+            # Create red segmentation map
+            seg_map = np.zeros_like(image_rgb, dtype=np.uint8)
+            seg_map[labels_np > 0] = [255, 0, 0]
         else:
-            # UNet
+            # UNet inference
             inp = torch.from_numpy(image_rgb.transpose(2,0,1)).float() / 255.0
             inp = inp.unsqueeze(0).to(DEVICE)
             with torch.no_grad():
                 logits = self.model(inp)
             labels_np = logits.argmax(dim=1).squeeze().cpu().numpy()
+            seg_map = draw_segmentation_map(labels_np, LABEL_COLORS_LIST)
 
-        seg_map = draw_segmentation_map(labels_np, LABEL_COLORS_LIST)
         output = image_overlay(image_rgb, seg_map)
-
         self.display_result(image_rgb, output)
 
     def select_video(self):
@@ -179,9 +208,7 @@ class CrackSegApp:
         fps = cap.get(cv2.CAP_PROP_FPS) or 30
         delay = int(1000 / fps)
 
-        # Contor pentru cadre
         self.frame_count = 0
-
         top = tk.Toplevel(self.root)
         top.title("Video Segmentation Result")
         label_vid = tk.Label(top)
@@ -194,7 +221,6 @@ class CrackSegApp:
                 return
 
             self.frame_count += 1
-            # Rotire și redimensionare
             frame = rotate_frame(frame, rotation)
             MAX_W, MAX_H = IMGSZ
             h, w = frame.shape[:2]
@@ -202,24 +228,35 @@ class CrackSegApp:
                 frame = cv2.resize(frame, (MAX_W, MAX_H))
             image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # Inference doar la fiecare 1 cadre
+            # Inferenta pe cadre
             if self.frame_count % 1 == 0:
-                if self.extractor is not None:
-                    labels = predict(self.model, self.extractor, image_rgb, DEVICE)
-                    labels_np = labels.cpu()
+                sel = self.selected_model.get()
+                if sel == 'Segformer Model':
+                    lb = predict(self.base_model, self.base_extractor, image_rgb, DEVICE)
+                    lp = predict(self.pot_model, self.pot_extractor, image_rgb, DEVICE)
+                    base_np = lb.cpu().numpy()
+                    pot_np = lp.cpu().numpy()
+                    seg_base = draw_segmentation_map(base_np, LABEL_COLORS_LIST)
+                    pot_mask = pot_np > 0
+                    seg_base[pot_mask] = [255, 0, 0]
+                    labels_np = seg_base
+                elif sel == 'Segformer Pothole Model':
+                    l = predict(self.pot_model, self.pot_extractor, image_rgb, DEVICE)
+                    pot_np = l.cpu().numpy()
+                    seg_base = np.zeros_like(image_rgb, dtype=np.uint8)
+                    seg_base[pot_np > 0] = [255, 0, 0]
+                    labels_np = seg_base
                 else:
                     inp = torch.from_numpy(image_rgb.transpose(2,0,1)).float() / 255.0
                     inp = inp.unsqueeze(0).to(DEVICE)
                     with torch.no_grad():
                         logits = self.model(inp)
-                    labels_np = logits.argmax(dim=1).squeeze().cpu().numpy()
+                    labels = logits.argmax(dim=1).squeeze().cpu().numpy()
+                    labels_np = draw_segmentation_map(labels, LABEL_COLORS_LIST)
 
-                seg_map = draw_segmentation_map(labels_np, LABEL_COLORS_LIST)
-                output = image_overlay(image_rgb, seg_map)
-                # Convertire rezultat pentru afișare
+                output = image_overlay(image_rgb, labels_np)
                 output_display = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
             else:
-                # Afișează imaginea originală fără segmentare
                 output_display = image_rgb
 
             img = Image.fromarray(output_display)
