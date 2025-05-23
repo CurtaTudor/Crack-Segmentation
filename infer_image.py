@@ -43,9 +43,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input',  default='input/inference_data/images',
                         help='director cu imagini de inferență')
-    parser.add_argument('--config', default='out/outputs/model_iou/config.json',
+    parser.add_argument('--config', default='out/outputs_unet/final_model/config.json',
                         help='calea către config.json')
-    parser.add_argument('--weights',default='out/outputs/model_iou/model.safetensors',
+    parser.add_argument('--weights',default='out/outputs_unet/final_model/model.safetensors',
                         help='calea către model.safetensors')
     parser.add_argument('--device', default='cuda:0',
                         help='cuda:0 sau cpu')
@@ -75,7 +75,7 @@ def main():
     model.to(device)
     model.eval()
 
-    out_dir = 'out/outputs/inference_results_image_unet'
+    out_dir = 'out/outputs_unet/inference_results_image_unet'
     os.makedirs(out_dir, exist_ok=True)
 
     for image_path in glob.glob(os.path.join(args.input, '*')):

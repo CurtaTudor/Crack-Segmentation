@@ -47,17 +47,17 @@ def main():
     )
     parser.add_argument(
         '--output',
-        default='out/outputs/video_inference',
+        default='out/outputs_unet/video_inference',
         help='director de ieșire pentru fișierul video cu overlay'
     )
     parser.add_argument(
         '--config',
-        default='out/outputs/model_iou/config.json',
+        default='out/outputs_unet/final_model/config.json',
         help='calea către config.json'
     )
     parser.add_argument(
         '--weights',
-        default='out/outputs/model_iou/model.safetensors',
+        default='out/outputs_unet/final_model/model.safetensors',
         help='calea către model.safetensors'
     )
     parser.add_argument(
