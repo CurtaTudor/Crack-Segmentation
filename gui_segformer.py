@@ -10,6 +10,7 @@ from safetensors.torch import load_file
 from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
 from config import VIS_LABEL_MAP as LABEL_COLORS_LIST
 from utils import draw_segmentation_map, image_overlay, predict
+from patch_model import build_model, predict_on_crops
 
 # Device ("cuda:0" sau "cpu")
 DEVICE = 'cpu'
@@ -44,7 +45,13 @@ class CrackSegApp:
         self.model_configs = {
             'Segformer Model': {'type': 'segformer', 'path': 'out/outputs/model_iou'},
             'Segformer Pothole Model': {'type': 'segformer', 'path': 'out/outputs_pot/model_iou'},
-            'UNet Model': {'type': 'unet', 'config': 'out/outputs_unet/final_model/config.json', 'weights': 'out/outputs_unet/final_model/model.safetensors'}
+            'UNet Model': {'type': 'unet', 'config': 'out/outputs_unet/final_model/config.json', 'weights': 'out/outputs_unet/final_model/model.safetensors'},
+            'ResNet50 Classifier': {
+                'type': 'resnet50',
+                'model_path': 'out/outputs_resnet/model.pth',
+                'crop_h': 32,
+                'crop_w': 32
+            }
         }
 
         self.base_extractor = SegformerFeatureExtractor()
@@ -73,6 +80,16 @@ class CrackSegApp:
         if cfg['type'] == 'segformer':
             self.extractor = (self.base_extractor if selection=='Segformer Model' else self.pot_extractor)
             self.model = (self.base_model if selection=='Segformer Model' else self.pot_model)
+        elif cfg['type'] == 'resnet50':
+            model = build_model(DEVICE)
+            checkpoint = torch.load(cfg['model_path'], map_location=DEVICE, weights_only=False)
+            if isinstance(checkpoint, dict):
+                model.load_state_dict(checkpoint)
+            else:
+                model = checkpoint
+                model.to(DEVICE).eval()
+                self.model = model
+                self.extractor = None
         else:
             with open(cfg['config'], 'r') as f:
                 js = json.load(f)
@@ -111,6 +128,12 @@ class CrackSegApp:
             lp=predict(self.pot_model,self.pot_extractor,img_rgb,DEVICE).cpu().numpy()
             seg=np.zeros_like(img_rgb,dtype=np.uint8)
             seg[lp>0]=[255,0,0]
+        elif sel == 'ResNet50 Classifier':
+            out_bgr = predict_on_crops(self.model, path,
+                                   height=self.model_configs[sel]['crop_h'],
+                                   width=self.model_configs[sel]['crop_w'])
+            self.display_result(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB),out_bgr)
+            return            
         else:
             inp=torch.from_numpy(img_rgb.transpose(2,0,1)).float()/255.0
             inp=inp.unsqueeze(0).to(DEVICE)
@@ -157,38 +180,44 @@ class CrackSegApp:
         update()
 
     def display_result(self, orig_np, output_bgr_np):
-        legend = [('Crack', (0, 255, 0)), ('Pothole', (0, 0, 255))]
-        box_w, box_h = 40, 40
-        padding = 20
-        font_scale = 1.0
-        thickness = 3
-  
-        start_x = padding
-        start_y = padding
-        legend_w = box_w + padding + 150
-        legend_h = len(legend) * (box_h + padding) + padding - 20
+        sel = self.selected_model.get()
+        if sel != 'ResNet50 Classifier':
+            legend = [('Crack', (0, 255, 0)), ('Pothole', (0, 0, 255))]
+        else:
+            legend = []
+
+        if legend:        
+            box_w, box_h = 40, 40
+            padding = 20
+            font_scale = 1.0
+            thickness = 3
     
-        overlay = output_bgr_np.copy()
-        cv2.rectangle(overlay,
-                      (start_x - padding//2, start_y - padding//2),
-                      (start_x + legend_w, start_y + legend_h),
-                      (255, 255, 255), -1)
-        cv2.addWeighted(overlay, 0.7, output_bgr_np, 0.3, 0, output_bgr_np)
-  
-        cv2.rectangle(output_bgr_np,
-                      (start_x - padding//2, start_y - padding//2),
-                      (start_x + legend_w, start_y + legend_h),
-                      (0, 0, 0), thickness)
- 
-        for idx, (lbl, col) in enumerate(legend):
-            y = start_y + idx * (box_h + padding)
+            start_x = padding
+            start_y = padding
+            legend_w = box_w + padding + 150
+            legend_h = len(legend) * (box_h + padding) + padding - 20
+        
+            overlay = output_bgr_np.copy()
+            cv2.rectangle(overlay,
+                        (start_x - padding//2, start_y - padding//2),
+                        (start_x + legend_w, start_y + legend_h),
+                        (255, 255, 255), -1)
+            cv2.addWeighted(overlay, 0.7, output_bgr_np, 0.3, 0, output_bgr_np)
+    
             cv2.rectangle(output_bgr_np,
-                          (start_x, y),
-                          (start_x + box_w, y + box_h),
-                          col, -1)
-            cv2.putText(output_bgr_np, lbl,
-                        (start_x + box_w + padding, y + box_h - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness)
+                        (start_x - padding//2, start_y - padding//2),
+                        (start_x + legend_w, start_y + legend_h),
+                        (0, 0, 0), thickness)
+    
+            for idx, (lbl, col) in enumerate(legend):
+                y = start_y + idx * (box_h + padding)
+                cv2.rectangle(output_bgr_np,
+                            (start_x, y),
+                            (start_x + box_w, y + box_h),
+                            col, -1)
+                cv2.putText(output_bgr_np, lbl,
+                            (start_x + box_w + padding, y + box_h - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness)
 
         top = tk.Toplevel(self.root)
         top.title("Inference result")
