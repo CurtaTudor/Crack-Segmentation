@@ -82,14 +82,16 @@ class CrackSegApp:
             self.model = (self.base_model if selection=='Segformer Model' else self.pot_model)
         elif cfg['type'] == 'resnet50':
             model = build_model(DEVICE)
-            checkpoint = torch.load(cfg['model_path'], map_location=DEVICE, weights_only=False)
+            checkpoint = torch.load(cfg['model_path'], map_location=DEVICE)
             if isinstance(checkpoint, dict):
                 model.load_state_dict(checkpoint)
+            elif isinstance(checkpoint, torch.nn.Module):
+                model = checkpoint.to(DEVICE)
             else:
-                model = checkpoint
-                model.to(DEVICE).eval()
-                self.model = model
-                self.extractor = None
+                raise ValueError(f"Unsupported checkpoint type: {type(checkpoint)}")
+            model.to(DEVICE).eval()
+            self.model = model
+            self.extractor = None
         else:
             with open(cfg['config'], 'r') as f:
                 js = json.load(f)
