@@ -1,5 +1,5 @@
 # python infer_video.py --input input/inference_data/videos/DJI.mp4 --device cpu --imgsz 1568 1088
-# python infer_video.py --input input/inference_data/videos/11_Trim.mp4 --device cpu --imgsz 1568 1088
+# python infer_video.py --input input/inference_data/videos/my_video.mp4 --imgsz 1568 1088
 
 from transformers import (
     SegformerFeatureExtractor, 

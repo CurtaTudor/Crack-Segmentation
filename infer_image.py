@@ -1,5 +1,6 @@
 # python infer_image.py --input input/valid/images/ --device cpu --imgsz 1568 1088
 # python infer_image.py --input input/edmcrack_images/ --device cpu --imgsz 1568 1088
+# python infer_image.py --input input/data_dataset_voc/JPEGImages/ --imgsz 1568 1088
 
 from transformers import (
     SegformerFeatureExtractor, 

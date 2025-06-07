@@ -13,7 +13,7 @@ from utils import draw_segmentation_map, image_overlay, predict
 from patch_model import build_model, predict_on_crops
 
 # Device ("cuda:0" sau "cpu")
-DEVICE = 'cpu'
+DEVICE = 'cuda:0'
 # Image Size
 IMGSZ = (1568, 1088)
 
@@ -148,7 +148,7 @@ class CrackSegApp:
         path=filedialog.askopenfilename(title="Select a video",filetypes=[("Video files","*.mp4 *.mov *.avi *.mkv"),("All files","*.*")])
         if not path: return
         cap=cv2.VideoCapture(path);rot=get_rotation(path)
-        fps=cap.get(cv2.CAP_PROP_FPS) or 30; delay=int(1000/fps)
+        fps=cap.get(cv2.CAP_PROP_FPS) or 30; delay=int(100/fps)
         self.frame_count=0; top=tk.Toplevel(self.root); top.title("Video Segmentation Result")
         lbl=tk.Label(top); lbl.pack()
         def update():
@@ -162,9 +162,9 @@ class CrackSegApp:
             if self.frame_count%1==0:
                 sel=self.selected_model.get()
                 if sel=='Segformer Model':
-                    base=predict(self.base_model,self.base_extractor,img_rgb,DEVICE).cpu().numpy()
-                    pot=predict(self.pot_model,self.pot_extractor,img_rgb,DEVICE).cpu().numpy()
-                    seg_map=draw_segmentation_map(base,LABEL_COLORS_LIST); seg_map[pot>0]=[255,0,0]
+                    with torch.no_grad():
+                        base=predict(self.base_model,self.base_extractor,img_rgb,DEVICE).cpu().numpy()
+                        seg_map=draw_segmentation_map(base,LABEL_COLORS_LIST); 
                 elif sel=='Segformer Pothole Model':
                     pot=predict(self.pot_model,self.pot_extractor,img_rgb,DEVICE).cpu().numpy()
                     seg_map=np.zeros_like(img_rgb,dtype=np.uint8); seg_map[pot>0]=[255,0,0]
