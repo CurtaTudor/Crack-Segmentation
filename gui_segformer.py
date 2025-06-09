@@ -15,7 +15,7 @@ from patch_model import build_model, predict_on_crops
 # Device ("cuda:0" sau "cpu")
 DEVICE = 'cuda:0'
 # Image Size
-IMGSZ = (1568, 1088)
+IMGSZ = (768, 1024)
 
 def get_rotation(path):
     angle = 0
@@ -45,7 +45,7 @@ class CrackSegApp:
         self.model_configs = {
             'Segformer Model': {'type': 'segformer', 'path': 'out/outputs/model_iou'},
             'Segformer Pothole Model': {'type': 'segformer', 'path': 'out/outputs_pot/model_iou'},
-            'UNet Model': {'type': 'unet', 'config': 'out/outputs_unet/final_model/config.json', 'weights': 'out/outputs_unet/final_model/model.safetensors'},
+            'UNet Model': {'type': 'unet', 'config': 'out/outputs_unet/model_iou/config.json', 'weights': 'out/outputs_unet/model_iou/model.safetensors'},
             'ResNet50 Classifier': {
                 'type': 'resnet50',
                 'model_path': 'out/outputs_resnet/model.pth',
@@ -147,14 +147,16 @@ class CrackSegApp:
     def select_video(self):
         path=filedialog.askopenfilename(title="Select a video",filetypes=[("Video files","*.mp4 *.mov *.avi *.mkv"),("All files","*.*")])
         if not path: return
-        cap=cv2.VideoCapture(path);rot=get_rotation(path)
+        cap=cv2.VideoCapture(path)
+        #rot=get_rotation(path)
         fps=cap.get(cv2.CAP_PROP_FPS) or 30; delay=int(100/fps)
         self.frame_count=0; top=tk.Toplevel(self.root); top.title("Video Segmentation Result")
         lbl=tk.Label(top); lbl.pack()
         def update():
             ret,frame=cap.read()
             if not ret: cap.release(); return
-            self.frame_count+=1; frame=rotate_frame(frame,rot)
+            self.frame_count+=1
+            #frame=rotate_frame(frame,rot)
             h,w=frame.shape[:2]
             if w>IMGSZ[0] or h>IMGSZ[1]: frame=cv2.resize(frame,IMGSZ)
             img_rgb=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
