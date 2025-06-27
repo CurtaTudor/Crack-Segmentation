@@ -13,9 +13,9 @@ from utils import draw_segmentation_map, image_overlay, predict
 from patch_model import build_model, predict_on_crops
 
 # Device ("cuda:0" sau "cpu")
-DEVICE = 'cuda:0'
+DEVICE = 'cpu'
 # Image Size
-IMGSZ = (768, 1024)
+IMGSZ = (1088, 1568)
 
 def get_rotation(path):
     angle = 0
@@ -145,43 +145,89 @@ class CrackSegApp:
         self.display_result(img_rgb,output)
 
     def select_video(self):
-        path=filedialog.askopenfilename(title="Select a video",filetypes=[("Video files","*.mp4 *.mov *.avi *.mkv"),("All files","*.*")])
-        if not path: return
-        cap=cv2.VideoCapture(path)
-        #rot=get_rotation(path)
-        fps=cap.get(cv2.CAP_PROP_FPS) or 30; delay=int(100/fps)
-        self.frame_count=0; top=tk.Toplevel(self.root); top.title("Video Segmentation Result")
-        lbl=tk.Label(top); lbl.pack()
+        path = filedialog.askopenfilename(
+            title="Select a video",
+            filetypes=[("Video files","*.mp4 *.mov *.avi *.mkv"),("All files","*.*")]
+        )
+        if not path:
+            return
+
+        # dialog pentru salvare rezultat
+        save_path = filedialog.asksaveasfilename(
+            title="Save result as...",
+            defaultextension=".mp4",
+            filetypes=[("MP4 Video","*.mp4"),("All files","*.*")]
+        )
+        if not save_path:
+            return
+
+        cap = cv2.VideoCapture(path)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30
+        delay = int(1000 / fps)
+
+        # variabilă pentru VideoWriter
+        self.writer = None
+
+        self.frame_count = 0
+        top = tk.Toplevel(self.root)
+        top.title("Video Segmentation Result")
+        lbl = tk.Label(top)
+        lbl.pack()
+
         def update():
-            ret,frame=cap.read()
-            if not ret: cap.release(); return
-            self.frame_count+=1
-            #frame=rotate_frame(frame,rot)
-            h,w=frame.shape[:2]
-            if w>IMGSZ[0] or h>IMGSZ[1]: frame=cv2.resize(frame,IMGSZ)
-            img_rgb=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
-            #Inferenta pe cadre
-            if self.frame_count%1==0:
-                sel=self.selected_model.get()
-                if sel=='Segformer Model':
-                    with torch.no_grad():
-                        base=predict(self.base_model,self.base_extractor,img_rgb,DEVICE).cpu().numpy()
-                        seg_map=draw_segmentation_map(base,LABEL_COLORS_LIST); 
-                elif sel=='Segformer Pothole Model':
-                    pot=predict(self.pot_model,self.pot_extractor,img_rgb,DEVICE).cpu().numpy()
-                    seg_map=np.zeros_like(img_rgb,dtype=np.uint8); seg_map[pot>0]=[255,0,0]
-                else:
-                    inp=torch.from_numpy(img_rgb.transpose(2,0,1)).float()/255.0
-                    inp=inp.unsqueeze(0).to(DEVICE)
-                    lbls=self.model(inp).argmax(1).squeeze().cpu().numpy()
-                    seg_map=draw_segmentation_map(lbls,LABEL_COLORS_LIST)
-                out=image_overlay(img_rgb,seg_map); display=cv2.cvtColor(out,cv2.COLOR_BGR2RGB)
+            ret, frame = cap.read()
+            if not ret:
+                cap.release()
+                if self.writer:
+                    self.writer.release()
+                return
+
+            self.frame_count += 1
+
+            # resize dacă e nevoie
+            h, w = frame.shape[:2]
+            if w > IMGSZ[0] or h > IMGSZ[1]:
+                frame = cv2.resize(frame, IMGSZ)
+                h, w = IMGSZ
+
+            # inițializează writer la primul frame
+            if self.writer is None:
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                self.writer = cv2.VideoWriter(save_path, fourcc, fps, (w, h))
+
+            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # inferență
+            sel = self.selected_model.get()
+            if sel == 'Segformer Model':
+                with torch.no_grad():
+                    base = predict(self.base_model, self.base_extractor, img_rgb, DEVICE).cpu().numpy()
+                seg_map = draw_segmentation_map(base, LABEL_COLORS_LIST)
+            elif sel == 'Segformer Pothole Model':
+                pot = predict(self.pot_model, self.pot_extractor, img_rgb, DEVICE).cpu().numpy()
+                seg_map = np.zeros_like(img_rgb, dtype=np.uint8)
+                seg_map[pot > 0] = [255, 0, 0]
             else:
-                display=img_rgb
-            im=Image.fromarray(display); imgtk=ImageTk.PhotoImage(im)
-            lbl.imgtk=imgtk; lbl.config(image=imgtk)
-            lbl.after(delay,update)
+                inp = torch.from_numpy(img_rgb.transpose(2,0,1)).float()/255.0
+                inp = inp.unsqueeze(0).to(DEVICE)
+                lbls = self.model(inp).argmax(1).squeeze().cpu().numpy()
+                seg_map = draw_segmentation_map(lbls, LABEL_COLORS_LIST)
+
+            out_bgr = image_overlay(img_rgb, seg_map)
+            # scrie frame-ul în fișier
+            self.writer.write(out_bgr)
+
+            # afișează în UI (conversie la RGB pentru Tkinter)
+            display = cv2.cvtColor(out_bgr, cv2.COLOR_BGR2RGB)
+            im = Image.fromarray(display)
+            imgtk = ImageTk.PhotoImage(im)
+            lbl.imgtk = imgtk
+            lbl.config(image=imgtk)
+
+            lbl.after(delay, update)
+
         update()
+
 
     def display_result(self, orig_np, output_bgr_np):
         sel = self.selected_model.get()
