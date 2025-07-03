@@ -202,7 +202,9 @@ class CrackSegApp:
             if sel == 'Segformer Model':
                 with torch.no_grad():
                     base = predict(self.base_model, self.base_extractor, img_rgb, DEVICE).cpu().numpy()
+                    lp=predict(self.pot_model,self.pot_extractor,img_rgb,DEVICE).cpu().numpy()
                 seg_map = draw_segmentation_map(base, LABEL_COLORS_LIST)
+                seg_map[lp>0]=[255,0,0]
             elif sel == 'Segformer Pothole Model':
                 pot = predict(self.pot_model, self.pot_extractor, img_rgb, DEVICE).cpu().numpy()
                 seg_map = np.zeros_like(img_rgb, dtype=np.uint8)

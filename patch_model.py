@@ -144,7 +144,6 @@ def predict_on_crops(model, image_path, height=227, width=227, output_path=None)
                 _, pred = torch.max(outputs, 1)
             class_name = idx_to_class[pred.item()]
             color = (0,0,255) if class_name=='Positive' else (0,255,0)
-            #cv2.putText(crop, class_name, (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
             overlay = np.full(crop.shape, color, dtype=np.uint8)
             out_crop = cv2.addWeighted(crop, 0.9, overlay, 0.1, 0)
             h_copy = min(height, h - i)

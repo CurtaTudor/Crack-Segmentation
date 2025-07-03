@@ -30,15 +30,11 @@ def train(
         optimizer.zero_grad()
         outputs = model(pixel_values=pixel_values, labels=target)
 
-        ##### BATCH-WISE LOSS #####
         loss = outputs.loss
         train_running_loss += loss.item()
-        ###########################
 
-        ##### BACKPROPAGATION AND PARAMETER UPDATION #####
         loss.backward()
         optimizer.step()
-        ##################################################
 
         logits = outputs.logits
         upsampled_logits = nn.functional.interpolate(
@@ -48,9 +44,7 @@ def train(
         )
         iou_eval.addBatch(upsampled_logits.max(1)[1].data, target.data)
         
-    ##### PER EPOCH LOSS #####
     train_loss = train_running_loss / counter
-    ##########################
     overall_acc, per_class_acc, per_class_iou, mIOU = iou_eval.getMetric()
     return train_loss, overall_acc, mIOU
 
