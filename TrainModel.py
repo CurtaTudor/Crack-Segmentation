@@ -2,9 +2,9 @@ import torch
 import os
 import argparse
 
-from datasets import get_images, get_dataset, get_data_loaders
-from model import segformer_model
-from config import ALL_CLASSES, LABEL_COLORS_LIST
+from PrepareDataset import get_images, get_dataset, get_data_loaders
+from Models import segformer_model
+from Configuration import ALL_CLASSES, LABEL_COLORS_LIST
 from transformers import SegformerFeatureExtractor
 from engine import train, validate
 from utils import save_model, SaveBestModel, save_plots, SaveBestModelIOU

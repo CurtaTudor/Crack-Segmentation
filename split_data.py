@@ -12,11 +12,10 @@ from tqdm.auto import tqdm
 SEED = 42
 random.seed(SEED)
 
-SRC_ROOT_DIR = 'input/data_dataset_voc' # Contains two directories for all images and all masks.
+SRC_ROOT_DIR = 'input/data_dataset_voc'
 SRC_IMAGES = os.path.join(SRC_ROOT_DIR, 'JPEGImages')
 SRC_MASKS = os.path.join(SRC_ROOT_DIR, 'SegmentationClassPNG')
 
-# Path to save.
 DEST_ROOT_DIR = 'input'
 TRAIN_IMAGES = os.path.join(DEST_ROOT_DIR, 'train', 'images')
 TRAIN_MASKS = os.path.join(DEST_ROOT_DIR, 'train', 'masks')
@@ -29,10 +28,6 @@ os.makedirs(VALID_IMAGES, exist_ok=True)
 os.makedirs(VALID_MASKS, exist_ok=True)
 
 VALID_SPLIT = 0.2
-
-################### 
-# NO NOT NEED TO MAKE ANY CHANGES BELOW THIS.
-###################
 
 ALL_IMAGES = os.listdir(SRC_IMAGES)
 ALL_MASKS = os.listdir(SRC_MASKS)

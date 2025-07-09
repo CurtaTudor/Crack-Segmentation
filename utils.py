@@ -5,32 +5,17 @@ import os
 import matplotlib.pyplot as plt
 import torch.nn as nn
 
-from config import (
+from Configuration import (
     VIS_LABEL_MAP as viz_map
 )
 
 plt.style.use('ggplot')
 
 def set_class_values(all_classes, classes_to_train):
-    """
-    This (`class_values`) assigns a specific class label to the each of the classes.
-    For example, `animal=0`, `archway=1`, and so on.
-
-    :param all_classes: List containing all class names.
-    :param classes_to_train: List containing class names to train.
-    """
     class_values = [all_classes.index(cls.lower()) for cls in classes_to_train]
     return class_values
 
 def get_label_mask(mask, class_values, label_colors_list):
-    """
-    This function encodes the pixels belonging to the same class
-    in the image into the same label
-
-    :param mask: NumPy array, segmentation mask.
-    :param class_values: List containing class values, e.g car=0, bus=1.
-    :param label_colors_list: List containing RGB color value for each class.
-    """
     label_mask = np.zeros((mask.shape[0], mask.shape[1]), dtype=np.uint8)
     for value in class_values:
         for ii, label in enumerate(label_colors_list):
@@ -41,7 +26,6 @@ def get_label_mask(mask, class_values, label_colors_list):
     return label_mask
 
 def denormalize(x, mean=None, std=None):
-    # x should be a Numpy array of shape [H, W, C] 
     x = torch.tensor(x).permute(2, 0, 1).unsqueeze(0)
     for t, m, s in zip(x, mean, std):
         t.mul_(s).add_(m)

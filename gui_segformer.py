@@ -8,7 +8,7 @@ import torch
 import segmentation_models_pytorch as smp
 from safetensors.torch import load_file
 from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
-from config import VIS_LABEL_MAP as LABEL_COLORS_LIST
+from Configuration import VIS_LABEL_MAP as LABEL_COLORS_LIST
 from utils import draw_segmentation_map, image_overlay, predict
 from patch_model import build_model, predict_on_crops
 

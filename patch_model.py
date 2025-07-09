@@ -12,11 +12,9 @@ from PIL import Image
 import numpy as np
 import cv2
 
-# Normalization constants
 mean_nums = [0.485, 0.456, 0.406]
 std_nums  = [0.229, 0.224, 0.225]
 
-# Define transforms for training and validation
 transforms_dict = {
     'train': transforms.Compose([
         transforms.RandomResizedCrop(227),
@@ -48,10 +46,10 @@ def load_dataset(data_dir, batch_size):
 def build_model(device):
     weights = ResNet50_Weights.DEFAULT
     model = resnet50(weights=weights)
-    # Freeze base layers
+
     for param in model.parameters():
         param.requires_grad = False
-    # Replace the classifier head
+
     fc_inputs = model.fc.in_features
     model.fc = nn.Sequential(
         nn.Linear(fc_inputs, 1024),

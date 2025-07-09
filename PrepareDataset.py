@@ -18,13 +18,8 @@ def get_images(root_path):
 
     return train_images, train_masks, valid_images, valid_masks
 
-def train_transforms(img_size):
-    """
-    Transforms/augmentations for training images and masks.
-
-    :param img_size: Integer, for image resize.
-    """
-    train_image_transform = A.Compose([
+def augment_training(img_size):
+    augment_training_image = A.Compose([
         A.Resize(img_size[1], img_size[0], always_apply=True),
         A.HorizontalFlip(p=0.5),
         A.RandomBrightnessContrast(p=0.2),
@@ -34,19 +29,14 @@ def train_transforms(img_size):
         A.RandomCrop(width=img_size[0], height=img_size[1], p=0.5),
         A.ElasticTransform(p=0.2),
 
-    ], is_check_shapes=False)
-    return train_image_transform
+    ], check_shape=False)
+    return augment_training_image
 
-def valid_transforms(img_size):
-    """
-    Transforms/augmentations for validation images and masks.
-
-    :param img_size: Integer, for image resize.
-    """
-    valid_image_transform = A.Compose([
+def augment_validation(img_size):
+    augment_validation_image = A.Compose([
         A.Resize(img_size[1], img_size[0], always_apply=True),
-    ], is_check_shapes=False)
-    return valid_image_transform
+    ], check_shape=False)
+    return augment_validation_image
 
 class SegmentationDataset(Dataset):
     def __init__(
@@ -78,14 +68,11 @@ class SegmentationDataset(Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype('float32')
         mask = cv2.imread(self.mask_paths[index], cv2.IMREAD_COLOR)
         mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB).astype('float32')
-        
-        # print(set( tuple(v) for m2d in mask for v in m2d ))
 
         transformed = self.tfms(image=image, mask=mask)
         image = transformed['image'].astype('uint8')
         mask = transformed['mask']
 
-        # Get 2D label mask.
         mask = get_label_mask(mask, self.class_values, self.label_colors_list).astype('uint8')
         mask = Image.fromarray(mask)
                
@@ -110,8 +97,8 @@ def get_dataset(
     img_size,
     feature_extractor
 ):
-    train_tfms = train_transforms(img_size)
-    valid_tfms = valid_transforms(img_size)
+    train_tfms = augment_training(img_size)
+    valid_tfms = augment_validation(img_size)
 
     train_dataset = SegmentationDataset(
         train_image_paths,
