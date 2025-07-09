@@ -10,12 +10,12 @@ from safetensors.torch import load_file
 from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
 from Configuration import VIS_LABEL_MAP as LABEL_COLORS_LIST
 from utils import draw_segmentation_map, image_overlay, predict
-from patch_model import build_model, predict_on_crops
+from PatchModel import build_model, predict_on_crops
 
 # Device ("cuda:0" sau "cpu")
 DEVICE = 'cpu'
 # Image Size
-IMGSZ = (1088, 1568)
+IMGSZ = (10000, 10000)
 
 def get_rotation(path):
     angle = 0
